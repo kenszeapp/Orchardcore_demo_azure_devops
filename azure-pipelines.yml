@@ -1,0 +1,52 @@
+variables:
+  buildConfiguration: 'Release'
+
+trigger:
+- main
+
+jobs:
+- job: buildandtest
+  pool:
+    name: OnPremAgentPool
+    demands:
+      - agent.name -equals AgentInDocker
+  steps:
+    - task: DotNetCoreCLI@2
+      displayName: 'Restore packages'
+      inputs:
+        command: 'restore'
+        projects: '**/*.csproj'
+    - task: DotNetCoreCLI@2
+      displayName: 'Build project'
+      inputs:
+        command: 'build'
+        projects: '**/*.csproj'
+    - task: DotNetCoreCLI@2
+      displayName: 'dotnet test'
+      inputs:
+        command: 'test'
+        projects: '**/*.test/*.csproj'
+
+- job: deploystaging
+  dependsOn: buildandtest
+  condition: succeeded()
+  pool:
+    name: OnPremAgentPool
+    demands:
+      - agent.name -equals AgentInDocker
+  steps:      
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: 'publish'
+        publishWebProjects: true
+    - task: AzureWebApp@1
+      inputs:
+        azureSubscription: 'az-devops-svc-conn'
+        appType: 'webAppLinux'
+        appName: 'orchardcore-demo-staging'
+        deployToSlotOrASE: true
+        resourceGroupName: 'oc-demo-devops-hk-rg'
+        slotName: 'production'
+        package: '$(System.DefaultWorkingDirectory)/**/*.zip'
+        appSettings: '-ASPNETCORE_URLS http://*:8080'
+     
